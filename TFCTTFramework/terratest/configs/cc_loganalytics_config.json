@@ -1,0 +1,19 @@
+{
+  "workspaces": {
+    "ProdLogAnalytics": {
+      "name": "prod-logs",
+      "resource_group_name": "rg-monitoring",
+      "location": "canadacentral",
+      "sku": "PerGB2018",
+      "retention_in_days": 30,
+      "daily_quota_gb": 10,
+      "tags": {
+        "env": "prod",
+        "team": "devops"
+      },
+      "private_link_scope_ids": [
+        "/subscriptions/xxxx/resourceGroups/rg-monitoring/providers/Microsoft.Insights/privateLinkScopes/pls-prod"
+      ]
+    }
+  }
+}

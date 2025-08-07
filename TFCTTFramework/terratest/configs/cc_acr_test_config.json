@@ -1,0 +1,85 @@
+{
+  "expected_principal_id": "5d976b48-4340-4c05-ab09-e80ef3751794",
+  "registries": {
+    "ProdACR": {
+      "name": "prodacr001",
+      "resource_group_name": "rg-acr-prod",
+      "location": "canadacentral",
+      "sku": "Premium",
+      "admin_enabled": false,
+      "encryption": "CMK",
+      "tags": {
+        "env": "prod",
+        "owner": "DevSecOps",
+        "compliance": "ISO27001"
+      },
+      "network_rules": {
+        "default_action": "Deny",
+        "ip_rules": [
+          "10.10.0.0/24",
+          "192.168.1.0/24"
+        ]
+      },
+      "private_endpoints": [
+        "/subscriptions/855f9502-3230-4377-82a2-cc5c8fa3c59d/resourceGroups/rg-acr-prod/providers/Microsoft.Network/privateEndpoints/prod-acr-pe"
+      ],
+      "replications": [
+        { "location": "eastus" },
+        { "location": "westus2" }
+      ],
+      "webhooks": [
+        {
+          "name": "push-hook",
+          "actions": ["push"],
+          "tags": {
+            "purpose": "ci-cd",
+            "pipeline": "build-deploy"
+          }
+        },
+        {
+          "name": "delete-hook",
+          "actions": ["delete"],
+          "tags": {
+            "purpose": "cleanup",
+            "pipeline": "lifecycle"
+          }
+        }
+      ],
+      "retention_days": 30,
+      "anonymous_pull": false,
+      "content_trust_enabled": true,
+      "quota_gb": 500
+    },
+    "DevACR": {
+      "name": "devacr001",
+      "resource_group_name": "rg-acr-dev",
+      "location": "canadaeast",
+      "sku": "Standard",
+      "admin_enabled": true,
+      "encryption": "MicrosoftManaged",
+      "tags": {
+        "env": "dev",
+        "owner": "PlatformTeam"
+      },
+      "network_rules": {
+        "default_action": "Allow",
+        "ip_rules": []
+      },
+      "private_endpoints": [],
+      "replications": [],
+      "webhooks": [
+        {
+          "name": "dev-push-hook",
+          "actions": ["push"],
+          "tags": {
+            "purpose": "dev-ci"
+          }
+        }
+      ],
+      "retention_days": 7,
+      "anonymous_pull": true,
+      "content_trust_enabled": false,
+      "quota_gb": 100
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "expected_principal_id": "5d976b48-4340-4c05-ab09-e80ef3751794",
+  "insights": {
+    "ProdInsights": {
+      "name": "prod-ai-001",
+      "resource_group_name": "rg-appinsights-prod",
+      "location": "canadacentral",
+      "kind": "web",
+      "tags": {
+        "env": "prod",
+        "owner": "devsecops"
+      },
+      "retention_in_days": 90,
+      "daily_cap_gb": 100,
+      "disable_ip_masking": false,
+      "workspace_resource_id": "/subscriptions/.../resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/prod-law",
+      "public_network_access": true,
+      "exports": [
+        {
+          "name": "export-metrics",
+          "destination": "https://storage.blob.core.windows.net",
+          "export_types": ["Basic", "Audit"],
+          "enabled": true
+        }
+      ]
+    }
+  }
+}
