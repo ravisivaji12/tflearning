@@ -1,0 +1,89 @@
+name: 'SAP Landing ZONE (PR Merge)'
+
+on:
+  push:
+   branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  Plan:
+    name: 'SAPLandingZoneMergePlan'
+    runs-on: ubuntu-latest
+   # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: "1.9.5"
+       
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: |
+        terraform init
+    
+    # Validates for terraform dependency and mapping issues before running plan
+    - name: Terraform Validate
+      run: |
+        terraform validate
+
+    # Checks that all Terraform configuration files adhere to a canonical format
+    # - name: Terraform Format
+    #   run: terraform fmt -check
+
+    # Generates an execution plan for Terraform
+    - name: Terraform Plan
+      run: |
+        terraform plan -var MF_CI_AAD_CS=$AAD_CLIENT_SECRET
+#### manual approval####
+  Apply:
+    name: 'SAPLandingZoneMergeApply'
+    environment:
+      name: Apply
+    runs-on: ubuntu-latest
+    needs: Plan
+   # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: "1.9.5"
+       
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: |
+        terraform init
+    # On push to "main", build or change infrastructure according to Terraform configuration files  
+    - name: Terraform Apply
+      run: |
+        terraform apply -auto-approve -var MF_CI_AAD_CS=$AAD_CLIENT_SECRET
+

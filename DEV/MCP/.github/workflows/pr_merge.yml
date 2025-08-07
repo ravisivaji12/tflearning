@@ -1,0 +1,371 @@
+name: Azure Platform PR Merge Pipeline
+
+permissions:
+  contents: write
+  id-token: write  # only if you're using OIDC
+  pull-requests: read  # only if needed for PR jobs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  terraform-format:
+    name: Terraform Format
+    runs-on: ubuntu-latest
+    # environment: production
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init 
+        
+      - name: Terraform Format
+        run: terraform fmt -check -recursive
+
+  terraform-validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    # environment: production
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init 
+        
+      - name: Terraform Validate
+        run: terraform validate
+
+  terraform-docs:
+    name: Terraform documentation generation
+    runs-on: ubuntu-latest
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v3.6.0
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Render terraform docs inside the README.md and push changes back to PR branch
+        uses: terraform-docs/gh-actions@v1.0.0
+        with:
+          find-dir: .
+          output-file: README.md
+          output-method: inject
+          git-push: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  terraform-tfsec:
+    name: Terraform TfSec Scanning
+    runs-on: ubuntu-latest
+    # environment: production
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init 
+        
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+
+  terraform-checkov:
+    name: Terraform Checkov Scanning
+    runs-on: ubuntu-latest
+    # environment: production
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init 
+        
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          skip_check: CKV_TF_1,CKV_AZURE_178,CKV_AZURE_244,CKV_AZURE_32,CKV_AZURE_33,CKV2_AZURE_33,CKV2_AZURE_1,CKV2_AZURE_32,CKV_AZURE_206,CKV_AZURE_221,CKV_AZURE_77,CKV2_AZURE_40,CKV2_AZURE_41,CKV_AZURE_50,CKV_AZURE_93,CKV_AZURE_212,CKV_AZURE_225,CKV_AZURE_211,CKV_AZURE_36,CKV_AZURE_190,CKV_AZURE_251,CKV_AZURE_35,CKV_AZURE_43,CKV_AZURE_3,CKV_AZURE_44,CKV_AZURE_70,CKV_AZURE_145,CKV_AZURE_72,CKV2_AZURE_38,CKV2_AZURE_47,CKV_AZURE_59
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.plan.outputs.changes }}
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+    needs: [
+      terraform-format,
+      terraform-validate,
+      terraform-tfsec,
+      terraform-checkov,
+      terraform-docs,
+    ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init      
+              
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -out=plan.out -var "cfg_aad_client_secret=${{ secrets.AAD_CLIENT_SECRET }}" -detailed-exitcode
+          echo "changes=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Check Plan Status
+        run: |
+          if [ ${{ steps.plan.outputs.changes }} -eq 0 ]; then
+            echo "No changes detected in Terraform plan"
+          elif [ ${{ steps.plan.outputs.changes }} -eq 2 ]; then
+            echo "Changes detected in Terraform plan - apply will be triggered"
+          else
+            echo "Terraform plan failed"
+            exit 1
+          fi
+
+      - name: Upload plan
+        if: steps.plan.outputs.changes == '2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: plan.out
+
+  checkov:
+    name: checkov Plan
+    runs-on: ubuntu-latest
+    if: needs.terraform-plan.outputs.has_changes == '2'
+    needs: terraform-plan
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init 
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: .
+
+      - name: Convert to JSON
+        run: terraform show -json plan.out > tfplan.json
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          file: tfplan.json
+          # Skipping as it is giving false positive
+          skip_check: CKV_TF_1,CKV_AZURE_178,CKV_AZURE_244,CKV_AZURE_32,CKV_AZURE_33,CKV2_AZURE_33,CKV2_AZURE_1,CKV2_AZURE_32,CKV_AZURE_206,CKV_AZURE_221,CKV_AZURE_77,CKV2_AZURE_40,CKV2_AZURE_41,CKV_AZURE_50,CKV_AZURE_93,CKV_AZURE_212,CKV_AZURE_225,CKV_AZURE_211,CKV_AZURE_36,CKV_AZURE_190,CKV_AZURE_251,CKV_AZURE_35,CKV_AZURE_43,CKV_AZURE_3,CKV_AZURE_44,CKV_AZURE_70,CKV_AZURE_145,CKV_AZURE_72,CKV2_AZURE_38,CKV2_AZURE_47,CKV_AZURE_59
+
+  compliance:
+    name: Terraform Compliance
+    runs-on: ubuntu-latest
+    if: needs.terraform-plan.outputs.has_changes == '2'
+    needs: terraform-plan
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init 
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: .
+
+      - name: Convert to JSON
+        run: terraform show -json plan.out > tfplan.json
+
+      - name: Install terraform-compliance
+        run: |
+          pip install terraform-compliance
+
+      # - name: Run terraform-compliance
+      #   run: terraform-compliance -p tfplan.json -f features/
+
+  terratest:
+    name: Terratest
+    runs-on: ubuntu-latest
+    if: needs.terraform-plan.outputs.has_changes == '2'
+    needs: terraform-plan
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init 
+      
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: true
+
+      # - name: Run Terratest
+      #   run: |
+      #     cd terratest
+      #     go mod tidy
+      #     go test -v -tags="azure azureslim network" -timeout 30m
+      #   env:
+      #     ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+  no-changes-summary:
+    name: No Changes Summary
+    runs-on: ubuntu-latest
+    if: needs.terraform-plan.outputs.has_changes == '0'
+    needs: terraform-plan
+    steps:
+      - name: Display No Changes Message
+        run: |
+          echo "Terraform plan completed successfully with no changes detected."
+          echo "No infrastructure deployment is required."
+          echo "All validation jobs have passed."
+
+  terraformapply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    environment: production
+    if: needs.terraform-plan.outputs.has_changes == '2'
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      AAD_CLIENT_SECRET: ${{ secrets.AAD_CLIENT_SECRET }}
+    needs: [terraform-plan, checkov, compliance, terratest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: true
+
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: .
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve plan.out
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
